@@ -70,8 +70,12 @@
       const dateInput = document.createElement('input');
       dateInput.type = 'date';
       dateInput.value = `${yyyy}-${mm}-${dd}`;
-      dateInput.min = `${yyyy}-${mm}-01`;
+      // 禁止手动键入和粘贴，只允许通过点击日期选择器选择日期
+      dateInput.addEventListener('keydown', function (e) { e.preventDefault(); });
+      dateInput.addEventListener('paste', function (e) { e.preventDefault(); });
+      // 将最大可选日期设置为今天，防止选择未来的日期
       dateInput.max = `${yyyy}-${mm}-${dd}`;
+      dateInput.min = `${yyyy}-${mm}-01`;
       dateInput.style.padding = '4px 6px';
   
       const headerTitle = document.createElement('span');
