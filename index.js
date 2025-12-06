@@ -26,7 +26,7 @@
     columnAppB.innerHTML = '';
   
     buildPanel();
-    fetchData(new Date().getDay());
+    fetchData(currentDate.getDate());
   
     // 获取数据
     async function fetchData(day) {
@@ -88,7 +88,7 @@
         const parts = this.value.split('-');
         currentDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
         headerTitle.textContent = formatHeader(currentDate);
-        fetchData(currentDate.getDay());
+        fetchData(currentDate.getDate());
       });
       headerContainer.appendChild(headerTitle);
       headerContainer.appendChild(dateInput);
