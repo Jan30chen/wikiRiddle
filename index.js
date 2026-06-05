@@ -302,5 +302,7 @@
   newLi.innerHTML = '<span style="color: #369cf8;cursor: pointer;">猜简介</span>';
   newLi.addEventListener('click', beginGame);
   document.querySelector('ul.crtChlNav').appendChild(newLi);
-  if (window.location.search) beginGame();
+  if (window.location.search.includes('subject=') || window.location.search.includes('index=')) {
+    beginGame();
+  }
 })();
