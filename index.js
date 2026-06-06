@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         班固米猜简介
 // @author       jan30chen
-// @match        https://chii.in/magi
-// @match        https://bgm.tv/magi
-// @match        https://bangumi.tv/magi
+// @match      https://chii.in/magi*
+// @match      https://bgm.tv/magi*
+// @match      https://bangumi.tv/magi*
 // ==/UserScript==
 (function () {
   function beginGame () {
@@ -15,10 +15,9 @@
     let currentEncryptedName = '';
     let guessedCharacters = new Set();
     let currentId = urlParams.get('subject');
-    let username = urlParams.get('user');
-    let nickname = '';
+    let currentUser = urlParams.get('user');
     let currentIndex = urlParams.get('index');
-    let indexName = '';
+    let titleName = '';
     let total = 0;
 
     // 清除之前的内容
@@ -26,153 +25,186 @@
     const columnAppB = document.getElementById('columnAppB');
     const puzzlesDiv = document.createElement('div');
     puzzlesDiv.id = 'puzzlesContainer';
+    const tipDiv = document.createElement('div');
+    tipDiv.id = 'tipDiv';
+    tipDiv.style.textAlign = 'center';
+    tipDiv.style.color = '#666';
+    tipDiv.style.marginTop = '50px';
+    tipDiv.style.marginBottom = '12px';
 
     columnAppA.innerHTML = '';
     columnAppB.innerHTML = '';
+    puzzlesDiv.innerHTML = '';
 
-    getUserInfo();
+    getInfo();
+    buildPanelB();
 
-    // 获取数据
-    async function fetchData (day) {
-      // 清空之前的内容
-      puzzlesDiv.innerHTML = '<p>加载谜题中……</p>';
-      columnAppB.innerHTML = '';
-      try {
-        // 基础方式 - 手动拼接
-        const indexId = urlParams.get('index') || 85782;
-        const params = {
-          type: 2,
-          limit: 31,
-          offset: 0
-        };
-        const queryString = new URLSearchParams(params).toString();
-        const response = await fetch(`https://api.bgm.tv/v0/indices/${indexId}/subjects?${queryString}`)
-        const data = await response.json();
-        const list = data.data.map(item => item.id);
-        currentId = list[day - 1];
-        fetchData2()
-      } catch (error) {
-        puzzlesDiv.innerHTML = '<p>加载谜题列表失败</p>';
-        console.error('请求失败:', error);
-      }
-    }
-    // 随机返回条目id
+    // 在题库中选取随机条目id
     async function fetchData3 () {
-      puzzlesDiv.innerHTML = '<p>加载谜题中……</p>';
-      columnAppB.innerHTML = '';
+      puzzlesDiv.innerHTML = '';
+      tipDiv.style.display = 'block';
+      tipDiv.textContent = '加载谜题条目中……';
       try {
-        const limit = 30;
+        const limit = 1;
         const randomIndex = Math.floor(Math.random() * (total + 1));
-        const params = {
-          limit: limit,
-          offset: Math.floor(randomIndex/limit),
-          type: 2,
-          subject_type: 2
-        };
-        const queryString = new URLSearchParams(params).toString();
-        const response = await fetch(`https://api.bgm.tv/v0/users/${username}/collections?&${queryString}`)
-        const data = await response.json();
-        const list = data.data.map(item => item['subject_id']);
-        currentId = list[randomIndex%limit];
+        let list = [];
+        if (currentUser) {
+          const params = {
+            limit: limit,
+            offset: Math.floor(randomIndex / limit),
+            type: 2,
+            subject_type: 2
+          };
+          const queryString = new URLSearchParams(params).toString();
+          const response = await fetch(`https://api.bgm.tv/v0/users/${currentUser}/collections?${queryString}`)
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+          const data = await response.json();
+          list = data.data.map(item => item['subject_id']);
+        } else if (currentIndex) {
+          const params = {
+            limit: limit,
+            offset: Math.floor(randomIndex / limit),
+            type: 2,
+          };
+          const queryString = new URLSearchParams(params).toString();
+          const response = await fetch(`https://api.bgm.tv/v0/indices/${currentIndex}/subjects?${queryString}`)
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+          const data = await response.json();
+          list = data.data.map(item => item.id);
+        }
+        currentId = list[0];
         fetchData2()
       } catch (error) {
-        puzzlesDiv.innerHTML = '<p>加载谜题失败</p>';
+        tipDiv.textContent = '加载谜题失败';
         console.error('请求失败:', error);
       }
     }
+    // 加载单条目数据
     async function fetchData2 () {
-      // 清空之前的内容
-      puzzlesDiv.innerHTML = '<p>加载谜题中……</p>';
-      columnAppB.innerHTML = '';
+      tipDiv.style.display = 'block';
+      tipDiv.textContent = '加载谜题中……';
       try {
         const response = await fetch(`https://api.bgm.tv/v0/subjects/${currentId}`)
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const info = await response.json();
         buildPuzzles(info);
       } catch (error) {
-        puzzlesDiv.innerHTML = '<p>加载谜题失败</p>';
-        console.error('请求失败:', error);
+        tipDiv.textContent = '加载谜题失败';
+        console.error('加载单条目数据失败:', error);
       }
     }
-    // 读取当前用户信息
-    async function getUserInfo () {
+    // 加载题库信息
+    async function getInfo () {
       try {
-        const response = await fetch(`https://api.bgm.tv/v0/users/${username}`);
-        const data = await response.json();
-        nickname = data.nickname;
-        buildPanel();
+        // 直接读取上次题库
+        if (urlParams.size === 0 && localStorage.getItem('wikiRiddleId')) {
+          const targetUrl = `${window.location.origin}/magi?${localStorage.getItem('wikiRiddleId')}`;
+          window.open(targetUrl, '_self');
+        } else if (currentUser) {
+          const response = await fetch(`https://api.bgm.tv/v0/users/${currentUser}`);
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data = await response.json();
+          titleName = data.nickname;
+          localStorage.setItem('wikiRiddleId', `user=${currentUser}`);
+        } else if (currentIndex) {
+          const response = await fetch(`https://api.bgm.tv/v0/indices/${currentIndex}`);
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data = await response.json();
+          titleName = data.title;
+          localStorage.setItem('wikiRiddleId', `index=${currentIndex}`);
+        } else if (currentId) {
+          localStorage.setItem('wikiRiddleId', `subject=${currentId}`);
+        }
+        buildPanelA();
       } catch (error) {
-        puzzlesDiv.innerHTML = '<p>读取用户信息失败</p>';
+        tipDiv.textContent = '读取信息失败';
         console.error('请求失败:', error);
       }
     }
-    // 构建面板
-    async function buildPanel () {
+    // 构建左侧面板
+    async function buildPanelA () {
+      tipDiv.textContent = '读取中……';
+      tipDiv.style.display = 'block';
+      // 读取题库总数
+      try {
+        if (currentUser) {
+          const response = await fetch(`https://api.bgm.tv/v0/users/${currentUser}/collections?subject_type=2&type=2`)
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data = await response.json()
+          total = data.total;
+        } else if (currentIndex) {
+          const response = await fetch(`https://api.bgm.tv/v0/indices/${currentIndex}/subjects`)
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data = await response.json()
+          total = data.total;
+        } else if (currentId) {
+          total = 1;
+          fetchData2()
+        }
+      } catch (error) {
+        tipDiv.textContent = '读取失败';
+        console.error('请求失败:', error);
+      }
+
       const headerContainer = document.createElement('div');
       headerContainer.style.display = 'flex';
       headerContainer.style.justifyContent = 'space-between';
       headerContainer.style.alignItems = 'center';
+      headerContainer.style.columnGap = '12px';
       headerContainer.style.marginTop = '8px';
       headerContainer.style.marginBottom = '8px';
 
-      // 清空之前的内容
-      puzzlesDiv.innerHTML = '<p>读取中……</p>';
-      columnAppB.innerHTML = '';
-      try {
-        const response = await fetch(`https://api.bgm.tv/v0/users/${username}/collections?subject_type=2&type=2`)
-        data = await response.json()
-        total = data.total;
-      } catch (error) {
-        puzzlesDiv.innerHTML = '<p>读取失败</p>';
-        console.error('请求失败:', error);
-      }
-
-      const headerTitle = document.createElement('span');
-      headerTitle.textContent = `当前题库：用户${nickname}的收藏`;
+      const headerTitle = document.createElement('a');
+      headerTitle.textContent = currentUser ? `当前题库：用户【${titleName}】的已看` : currentIndex ? `当前题库：目录【${titleName}】` : currentId ? '单条目' : '初次使用请在右侧加载题库';
+      headerTitle.href = `${window.location.origin}/anime/list/${currentUser}/collect`;
+      headerTitle.target = '_blank';
       headerTitle.style.color = '#f09199';
       headerTitle.style.borderBottom = '2px solid #f09199';
-      headerTitle.style.fontSize = '16px';
-      headerTitle.style.fontWeight = '600';
-      headerTitle.style.cursor = 'pointer';
+      headerTitle.style.fontSize = '14px';
+      // headerTitle.style.fontWeight = '600';
 
       const randomBtn = document.createElement('button');
-      randomBtn.textContent = `随机抽取(共${total}部) >`;
+      randomBtn.textContent = `点击抽取(共${total}部)`;
+      randomBtn.style.padding = '4px 8px';
       randomBtn.style.fontSize = '12px';
       randomBtn.style.cursor = 'pointer';
-      randomBtn.style.border = '1px solid #f09199';
+      randomBtn.style.border = 'none';
       randomBtn.style.background = '#f09199';
       randomBtn.style.color = '#fff';
       randomBtn.style.borderRadius = '4px';
+      randomBtn.style.flexShrink = '0';
       randomBtn.addEventListener('click', fetchData3);
-      randomBtn.style.marginLeft = 'auto';
 
       headerContainer.appendChild(headerTitle);
-      headerContainer.appendChild(randomBtn);
-      columnAppA.appendChild(headerContainer);
-
-      if (currentId) {
-        fetchData2();
+      if (total > 1) {
+        headerContainer.appendChild(randomBtn);
+        tipDiv.textContent = '点击右上方按钮抽取谜题';
+      } else {
+        tipDiv.textContent = '请在右侧加载题库';
       }
+      columnAppA.appendChild(headerContainer);
+      columnAppA.appendChild(tipDiv);
     }
     // 构建谜题面板
     function buildPuzzles (info) {
-      const {
-        name_cn,
-        summary
-      } = info;
+      const { name_cn, summary } = info;
       /* ---columnAppA start--- */
-      puzzlesDiv.innerHTML = '';
-      
+      tipDiv.style.display = 'none';
       const titleDiv = document.createElement('div');
+      titleDiv.id = 'titleDiv';
       titleDiv.style.fontSize = '20px';
       titleDiv.style.fontWeight = 'bold';
       titleDiv.style.margin = '10px 0';
       titleDiv.style.color = '#333';
 
       // name_cn 先移除所有标点和空格，再加密
-      const cleanedName = name_cn.replace(/[\p{P}\s]/gu, '');
-      titleDiv.textContent = encryptedText(name_cn.replace(/[\p{P}\s]/gu, ''));
+      const cleanedName = name_cn.replace(/[\p{P}\p{S}]/gu, '');
+      titleDiv.textContent = encryptedText(name_cn.replace(/[\p{P}\p{S}]/gu, ''));
 
       const summaryDiv = document.createElement('div');
+      summaryDiv.id = 'summaryDiv';
       summaryDiv.style.fontSize = '14px';
       summaryDiv.style.lineHeight = '1.6';
       summaryDiv.style.color = '#666';
@@ -187,8 +219,9 @@
       // summaryDiv 初始显示加密后的内容
       summaryDiv.textContent = currentEncryptedSummary;
 
-      // 检查 summary 是否含有日文假名
-      const hasJapaneseKana = /[\u3040-\u309F\u30A0-\u30FF]/.test(originalSummary);
+      // 检查 summary 是否含有超过5个日文假名
+      const kanaMatches = originalSummary.match(/[\u3040-\u309F\u30A0-\u30FF]/g);
+      const hasJapaneseKana = kanaMatches && kanaMatches.length > 5;
       if (hasJapaneseKana) {
         const bannerDiv = document.createElement('div');
         bannerDiv.style.background = '#fff3cd';
@@ -204,7 +237,9 @@
       puzzlesDiv.appendChild(summaryDiv);
       columnAppA.appendChild(puzzlesDiv);
       /* ---columnAppA end--- */
+    }
 
+    function buildPanelB () {
       /* ---columnAppB start:添加输入框和显示区域--- */
       const inputContainer = document.createElement('div');
       inputContainer.style.marginTop = '20px';
@@ -229,7 +264,7 @@
       guessedCharsDisplay.style.marginTop = '10px';
       guessedCharsDisplay.style.fontSize = '12px';
       guessedCharsDisplay.style.color = '#999';
-      guessedCharsDisplay.textContent = '已猜测字符：无';
+      guessedCharsDisplay.textContent = '尚未开始猜测';
 
       // 处理输入事件，使用 change 事件以兼容中文输入法
       inputBox.addEventListener('change', function (e) {
@@ -240,7 +275,7 @@
 
           // 更新 summary 的解密显示
           currentEncryptedSummary = originalSummary.split('').map(c => {
-            if (guessedCharacters.has(c.toUpperCase()) || /[\p{P}]/u.test(c)) {
+            if (guessedCharacters.has(c.toUpperCase()) || /[\p{P}\p{S}]/u.test(c)) {
               return c;
             }
             return '■';
@@ -254,11 +289,12 @@
             return '■';
           }).join('');
 
+          const summaryDiv = document.getElementById('summaryDiv');
+          const titleDiv = document.getElementById('titleDiv');
           if (currentEncryptedName === originalCleanedName) {
             // 全部猜中，显示完整内容
-            const site = window.location.origin
-            summaryDiv.textContent = originalSummary
-            titleDiv.innerHTML = `<a href=\"${site}/subject/${currentId}\" target=\"_blank\">${originalCleanedName}</a>`;
+            summaryDiv.textContent = originalSummary;
+            titleDiv.innerHTML = `<a href=\"${window.location.origin}/subject/${currentId}\">${originalCleanedName}</a>`;
             guessedCharsDisplay.textContent = `恭喜你猜中了！用了${guessedCharacters.size}个字。`;
             inputBox.value = '';
             inputBox.disabled = true;
@@ -291,57 +327,9 @@
       inputContainer.appendChild(inputLabel);
       inputContainer.appendChild(inputBox);
       inputContainer.appendChild(guessedCharsDisplay);
-
-      /* ---添加给其他人出题的输入框--- */
-      // const idLabel = document.createElement('label');
-      // idLabel.textContent = '给其他人出题：';
-      // idLabel.style.display = 'block';
-      // idLabel.style.marginTop = '12px';
-      // idLabel.style.marginBottom = '8px';
-      // idLabel.style.fontWeight = 'bold';
-
-      // const idInput = document.createElement('input');
-      // idInput.type = 'text';
-      // idInput.placeholder = '输入条目网址后回车';
-      // idInput.style.padding = '8px';
-      // idInput.style.fontSize = '14px';
-      // idInput.style.width = '200px';
-      // idInput.style.border = '1px solid #ccc';
-      // idInput.style.borderRadius = '4px';
-
-      // const idMsg = document.createElement('div');
-      // idMsg.style.fontSize = '12px';
-      // idMsg.style.color = '#999';
-      // idMsg.style.marginTop = '8px';
-      // idMsg.textContent = '';
-
-      // idInput.addEventListener('change', function (e) {
-      //   const val = e.target.value.trim();
-      //   const match = val.match(/\/subject\/(\d+)/);
-      //   if (match) {
-      //     const newUrl = new URL(window.location.origin + window.location.pathname);
-      //     newUrl.searchParams.set('subject', match[1]);
-      //     window.open(newUrl.toString(), '_blank');
-      //   } else {
-      //     idMsg.textContent = '条目地址以"/subject/数字"结尾';
-      //   }
-      // });
-      // idInput.addEventListener('keydown', function (e) {
-      //   if (e.key === 'Enter' && this.value.length > 0) {
-      //     this.dispatchEvent(new Event('change', {
-      //       bubbles: true
-      //     }));
-      //   }
-      // });
-
-      // inputContainer.appendChild(idLabel);
-      // inputContainer.appendChild(idInput);
-      // inputContainer.appendChild(idMsg);
-      /* ---添加给其他人出题的输入框 end--- */
-
       /* 题库选择输入框 */
       const addressLabel = document.createElement('label');
-      addressLabel.textContent = '用户或目录地址：';
+      addressLabel.textContent = '切换题库来源（用户首页/目录/单条目）：';
       addressLabel.style.display = 'block';
       addressLabel.style.marginTop = '12px';
       addressLabel.style.marginBottom = '8px';
@@ -349,7 +337,7 @@
 
       const addressInput = document.createElement('input');
       addressInput.type = 'text';
-      addressInput.placeholder = '输入用户或目录地址后回车';
+      addressInput.placeholder = '输入地址后回车';
       addressInput.style.padding = '8px';
       addressInput.style.fontSize = '14px';
       addressInput.style.width = '200px';
@@ -365,14 +353,22 @@
       function openAddressUrl (value) {
         const trimmed = value.trim();
         if (!trimmed) {
-          addressMsg.textContent = '请输入用户或目录地址。';
+          addressMsg.textContent = '请输入用户或目录地址：';
           return;
         }
 
         const userMatch = trimmed.match(/(?:https?:\/\/[^\/]+)?\/?user\/([^\/\?#]+)$/i);
         if (userMatch) {
           const targetUrl = `${window.location.origin}/magi?user=${encodeURIComponent(userMatch[1])}`;
-          window.open(targetUrl, '_blank');
+          window.open(targetUrl, '_self');
+          addressMsg.textContent = '';
+          return;
+        }
+
+        const subjectMatch = trimmed.match(/(?:https?:\/\/[^\/]+)?\/?subject\/([^\/\?#]+)$/i);
+        if (subjectMatch) {
+          const targetUrl = `${window.location.origin}/magi?subject=${encodeURIComponent(subjectMatch[1])}`;
+          window.open(targetUrl, '_self');
           addressMsg.textContent = '';
           return;
         }
@@ -380,7 +376,7 @@
         const indexMatch = trimmed.match(/(?:https?:\/\/[^\/]+)?\/?index\/([^\/\?#]+)$/i);
         if (indexMatch) {
           const targetUrl = `${window.location.origin}/magi?index=${encodeURIComponent(indexMatch[1])}`;
-          window.open(targetUrl, '_blank');
+          window.open(targetUrl, '_self');
           addressMsg.textContent = '';
           return;
         }
@@ -410,7 +406,6 @@
       inputContainer.appendChild(addressInput);
       inputContainer.appendChild(addressMsg);
       /* 题库选择输入框 end */
-
 
       columnAppB.appendChild(inputContainer);
       /* ---columnAppB end:添加输入框和显示区域--- */
