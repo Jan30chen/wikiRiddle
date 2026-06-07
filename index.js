@@ -1,12 +1,17 @@
 // ==UserScript==
 // @name         班固米猜简介
+// @namespace    http://tampermonkey.net/
+// @version      2026-06-07
+// @description  通过键入单个字，尝试猜测某部作品中简介可能存在的字，并猜出作品
 // @author       jan30chen
 // @match      https://chii.in/magi*
 // @match      https://bgm.tv/magi*
 // @match      https://bangumi.tv/magi*
+// @grant        none
 // ==/UserScript==
-(function () {
 
+(function () {
+  'use strict';
   function beginGame () {
     const urlParams = new URLSearchParams(window.location.search);
     let originalSummary = ''; // 包含标点的原始简介
@@ -17,6 +22,8 @@
     let guessedCharacters = new Set();  //  用户已猜测的字符集合
     let forceReveal = false; // 是否强制展示全部答案
     let refreshPuzzleDisplay = null; // 由 buildPuzzles 初始化
+    let inputBox = null;
+    let guessedCharsDisplay = null;
     let currentId = urlParams.get('subject');
     let currentUser = urlParams.get('user');
     let currentIndex = urlParams.get('index');
@@ -178,7 +185,22 @@
       randomBtn.style.color = '#fff';
       randomBtn.style.borderRadius = '4px';
       randomBtn.style.flexShrink = '0';
-      randomBtn.addEventListener('click', fetchData3);
+      randomBtn.addEventListener('click', function () {
+        guessedCharacters.clear();
+        forceReveal = false;
+        if (inputBox) {
+          inputBox.disabled = false;
+          inputBox.value = '';
+          inputBox.focus();
+        }
+        if (guessedCharsDisplay) {
+          guessedCharsDisplay.textContent = '尚未开始猜测';
+        }
+        if (refreshPuzzleDisplay) {
+          refreshPuzzleDisplay();
+        }
+        fetchData3();
+      });
 
       headerContainer.appendChild(headerTitle);
       if (total > 1) {
@@ -412,7 +434,7 @@
         });
         inputLabel.append(answerBtn);
 
-        const inputBox = document.createElement('input');
+        inputBox = document.createElement('input');
         inputBox.type = 'text';
         inputBox.placeholder = '输入至多10个字后回车';
         inputBox.style.padding = '8px';
@@ -422,7 +444,7 @@
         inputBox.style.borderRadius = '4px';
         inputBox.maxLength = 10;
 
-        const guessedCharsDisplay = document.createElement('div');
+        guessedCharsDisplay = document.createElement('div');
         guessedCharsDisplay.style.marginTop = '10px';
         guessedCharsDisplay.style.fontSize = '12px';
         guessedCharsDisplay.style.color = '#999';
