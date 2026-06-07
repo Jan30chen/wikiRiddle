@@ -205,10 +205,11 @@
       titleDiv.style.color = '#333';
 
       const numberOfRaters = document.createElement('span');
-      numberOfRaters.textContent = `(评分人数：${getStarsByAmount(numberReminder)})`;
+      numberOfRaters.textContent = `(热度：${getStarsByAmount(numberReminder)})`;
       numberOfRaters.style.fontSize = '12px';
       numberOfRaters.style.color = '#f09199';
       numberOfRaters.style.marginLeft = '8px';
+      numberOfRaters.title = `评分人数越多星号越多`;
 
       function getStarsByAmount (amount) {
         const thresholds = [100, 500, 2000, 5000, 10000];
@@ -225,7 +226,7 @@
 
         // 处理中文名称
         const trueName = name_cn || name;
-        const cleanedName = trueName.replace(/[\p{P}\p{S}]/gu, '');
+        const cleanedName = trueName.replace(/[\p{P}\p{S}\p{Z}]/gu, '');
 
         const summaryDiv = document.createElement('div');
         summaryDiv.id = 'summaryDiv';
@@ -333,20 +334,20 @@
             currentEncryptedSummary = originalSummary;
             currentEncryptedName = originalCleanedName;
             guessedCharacters = new Set(originalSummary.split('').map(c => c.toUpperCase()));
-            revealAnswerBtn.disabled = true;
+            inputBox.disabled = true;
           }
         });
         inputLabel.append(answerBtn);
 
         const inputBox = document.createElement('input');
         inputBox.type = 'text';
-        inputBox.placeholder = '输入一个字后回车';
+        inputBox.placeholder = '输入至多10个字后回车';
         inputBox.style.padding = '8px';
         inputBox.style.fontSize = '14px';
         inputBox.style.width = '200px';
-        inputBox.maxLength = '1';
         inputBox.style.border = '1px solid #ccc';
         inputBox.style.borderRadius = '4px';
+        inputBox.maxLength = 10;
 
         const guessedCharsDisplay = document.createElement('div');
         guessedCharsDisplay.style.marginTop = '10px';
@@ -356,13 +357,16 @@
 
         // 处理输入事件，使用 change 事件以兼容中文输入法
         inputBox.addEventListener('change', function (e) {
-          const char = e.target.value.trim();
-          if (char.length === 1) {
-            const upperChar = char.toUpperCase();
-            guessedCharacters.add(upperChar);
+          const inputText = e.target.value.trim();
+          if (inputText.length === 0) {
+            return;
+          }
 
-            // 更新 summary 的解密显示
-            currentEncryptedSummary = originalSummary.split('').map(c => {
+          const chars = Array.from(inputText).filter(c => c.trim().length > 0);
+          chars.forEach(ch => guessedCharacters.add(ch.toUpperCase()));
+
+          // 更新 summary 的解密显示
+          currentEncryptedSummary = originalSummary.split('').map(c => {
               if (guessedCharacters.has(c.toUpperCase()) || /[\p{P}\p{S}]/u.test(c)) {
                 return c;
               }
@@ -394,13 +398,6 @@
 
             inputBox.value = '';
             inputBox.focus();
-          } else if (char.length > 0) {
-            // 如果输入多个字符，只取第一个
-            inputBox.value = char[0];
-            inputBox.dispatchEvent(new Event('change', {
-              bubbles: true
-            }));
-          }
         });
 
         // 按下 Enter 键时也触发处理
