@@ -15,6 +15,8 @@
     let currentEncryptedName = '';  // 加密后的名称
     let yearReminder, tagReminder, scoreReminder, numberReminder = ''; // 未来可能的提示类型
     let guessedCharacters = new Set();  //  用户已猜测的字符集合
+    let forceReveal = false; // 是否强制展示全部答案
+    let refreshPuzzleDisplay = null; // 由 buildPuzzles 初始化
     let currentId = urlParams.get('subject');
     let currentUser = urlParams.get('user');
     let currentIndex = urlParams.get('index');
@@ -193,7 +195,7 @@
       const { name, name_cn, summary, date, meta_tags, rating } = info;
       yearReminder = date ? `${date.split('-')[0]}年` : '';
       tagReminder = meta_tags.join('、')
-      scoreReminder = rating.score ? `高于${Math.floor(rating.score)}分` : '';
+      scoreReminder = rating.score ? `${Math.floor(rating.score)}+` : '';
       numberReminder = rating.total
       /* ---columnAppA start--- */
       tipDiv.style.display = 'none';
@@ -203,6 +205,10 @@
       titleDiv.style.fontWeight = 'bold';
       titleDiv.style.margin = '10px 0';
       titleDiv.style.color = '#333';
+      titleDiv.style.display = 'flex';
+      titleDiv.style.flexWrap = 'wrap';
+      titleDiv.style.alignItems = 'center';
+      titleDiv.style.gap = '4px';
 
       const numberOfRaters = document.createElement('span');
       numberOfRaters.textContent = `(热度：${getStarsByAmount(numberReminder)})`;
@@ -231,8 +237,12 @@
         const summaryDiv = document.createElement('div');
         summaryDiv.id = 'summaryDiv';
         summaryDiv.style.fontSize = '14px';
+        summaryDiv.style.fontFamily = 'LXGW WenKai';
         summaryDiv.style.lineHeight = '1.6';
         summaryDiv.style.color = '#666';
+        summaryDiv.style.display = 'inline-flex';
+        summaryDiv.style.flexWrap = 'wrap';
+        summaryDiv.style.gap = '2px';
 
         // 保存原始值和加密后的内容
         originalSummary = summary.split('[简介原文]')[0]; // 兼容双语简介组件
@@ -240,11 +250,66 @@
         currentEncryptedSummary = encryptedText(originalSummary);
         currentEncryptedName = encryptedText(originalCleanedName);
         guessedCharacters.clear();
-        titleDiv.textContent = `${encryptedText(currentEncryptedName)}`;
-        titleDiv.appendChild(numberOfRaters);
+        forceReveal = false;
 
-        // summaryDiv 初始显示加密后的内容
-        summaryDiv.textContent = currentEncryptedSummary;
+        function createCharacterBox (char, guessed, revealAll, opts = {}) {
+          const size = typeof opts.size === 'number' ? opts.size : 20;
+          const fontSize = typeof opts.fontSize === 'number' ? opts.fontSize : 12;
+          const box = document.createElement('span');
+          box.style.width = size + 'px';
+          box.style.height = size + 'px';
+          box.style.display = 'inline-flex';
+          box.style.alignItems = 'center';
+          box.style.justifyContent = 'center';
+          box.style.border = '1px solid #ccc';
+          box.style.fontSize = fontSize + 'px';
+          box.style.lineHeight = '1';
+          box.style.boxSizing = 'border-box';
+          box.style.color = '#333';
+          box.style.background = 'transparent';
+          const isSymbol = /[\p{P}\p{S}]/u.test(char);
+          const visible = revealAll || guessed || isSymbol;
+
+          if (!visible) {
+            box.textContent = '■';
+            box.style.background = '#C7C4CC';
+            box.style.color = '#C7C4CC';
+            box.style.border = '1px solid #C7C4CC';
+          } else {
+            box.textContent = char;
+            if (guessed && !isSymbol) {
+              box.style.color = '#f09199';
+              box.style.border = '1px solid #f09199';
+            }
+          }
+          return box;
+        }
+
+        function renderTextBoxes (text, guessedCharacters, revealAll, opts = {}) {
+          const fragment = document.createDocumentFragment();
+          Array.from(text).forEach(char => {
+            const upperChar = char.toUpperCase();
+            const guessed = guessedCharacters.has(upperChar);
+            fragment.appendChild(createCharacterBox(char, guessed, revealAll, opts));
+          });
+          return fragment;
+        }
+
+        refreshPuzzleDisplay = function () {
+          const revealAll = forceReveal || currentEncryptedName === originalCleanedName;
+          titleDiv.innerHTML = '';
+          titleDiv.appendChild(renderTextBoxes(originalCleanedName, guessedCharacters, revealAll, { size: 25, fontSize: 14 }));
+          titleDiv.appendChild(numberOfRaters);
+          titleDiv.style.cursor = revealAll && currentId ? 'pointer' : 'default';
+          titleDiv.title = revealAll && currentId ? '查看条目详情' : '';
+          titleDiv.onclick = revealAll && currentId
+            ? function () { window.open(`${window.location.origin}/subject/${currentId}`, '_blank'); }
+            : null;
+          summaryDiv.innerHTML = '';
+          summaryDiv.appendChild(renderTextBoxes(originalSummary, guessedCharacters, revealAll, { size: 20, fontSize: 12 }));
+        }
+
+        refreshPuzzleDisplay();
 
         // 检查 summary 是否含有超过5个日文假名
         const kanaMatches = originalSummary.match(/[\u3040-\u309F\u30A0-\u30FF]/g);
@@ -268,6 +333,14 @@
         hintsContainer.style.display = 'flex';
         hintsContainer.style.gap = '8px';
         hintsContainer.style.flexWrap = 'wrap';
+        // 在提示按钮前增加说明文本
+        const hintsLabel = document.createElement('span');
+        hintsLabel.textContent = '点击展示提示 >>';
+        hintsLabel.style.fontSize = '12px';
+        hintsLabel.style.color = '#666';
+        hintsLabel.style.alignSelf = 'center';
+        hintsLabel.style.marginRight = '6px';
+        hintsContainer.appendChild(hintsLabel);
 
         const hintData = [
           { label: '年份', text: yearReminder || '暂无提示' },
@@ -328,13 +401,13 @@
         answerBtn.style.textDecoration = 'underline';
         answerBtn.addEventListener('click', function () {
           if (window.confirm('确定要直接查看答案吗？')) {
-            const site = window.location.origin;
-            summaryDiv.textContent = originalSummary;
-            titleDiv.innerHTML = `<a href="${site}/subject/${currentId}">${originalCleanedName}</a>`;
+            forceReveal = true;
             currentEncryptedSummary = originalSummary;
             currentEncryptedName = originalCleanedName;
-            guessedCharacters = new Set(originalSummary.split('').map(c => c.toUpperCase()));
             inputBox.disabled = true;
+            if (refreshPuzzleDisplay) {
+              refreshPuzzleDisplay();
+            }
           }
         });
         inputLabel.append(answerBtn);
@@ -365,39 +438,32 @@
           const chars = Array.from(inputText).filter(c => c.trim().length > 0);
           chars.forEach(ch => guessedCharacters.add(ch.toUpperCase()));
 
-          // 更新 summary 的解密显示
           currentEncryptedSummary = originalSummary.split('').map(c => {
-              if (guessedCharacters.has(c.toUpperCase()) || /[\p{P}\p{S}]/u.test(c)) {
-                return c;
-              }
-              return '■';
-            }).join('');
-
-            // 更新 name 的解密显示
-            currentEncryptedName = originalCleanedName.split('').map(c => {
-              if (guessedCharacters.has(c.toUpperCase())) {
-                return c;
-              }
-              return '■';
-            }).join('');
-
-            const summaryDiv = document.getElementById('summaryDiv');
-            const titleDiv = document.getElementById('titleDiv');
-            if (currentEncryptedName === originalCleanedName) {
-              // 全部猜中，显示完整内容
-              summaryDiv.textContent = originalSummary;
-              titleDiv.innerHTML = `<a href=\"${window.location.origin}/subject/${currentId}\">${originalCleanedName}</a>`;
-              guessedCharsDisplay.textContent = `恭喜你猜中了！用了${guessedCharacters.size}个字。`;
-              inputBox.value = '';
-              inputBox.disabled = true;
-              return;
+            if (guessedCharacters.has(c.toUpperCase()) || /[\p{P}\p{S}]/u.test(c)) {
+              return c;
             }
-            summaryDiv.textContent = currentEncryptedSummary;
-            titleDiv.textContent = currentEncryptedName;
-            guessedCharsDisplay.textContent = '已猜测字符：' + Array.from(guessedCharacters).join('、');
+            return '■';
+          }).join('');
 
-            inputBox.value = '';
-            inputBox.focus();
+          currentEncryptedName = originalCleanedName.split('').map(c => {
+            if (guessedCharacters.has(c.toUpperCase())) {
+              return c;
+            }
+            return '■';
+          }).join('');
+
+          if (currentEncryptedName === originalCleanedName) {
+            guessedCharsDisplay.textContent = `恭喜你猜中了！用了${guessedCharacters.size}个字。`;
+            inputBox.disabled = true;
+          } else {
+            guessedCharsDisplay.textContent = '已猜测字符：' + Array.from(guessedCharacters).join('、');
+          }
+
+          if (refreshPuzzleDisplay) {
+            refreshPuzzleDisplay();
+          }
+          inputBox.value = '';
+          inputBox.focus();
         });
 
         // 按下 Enter 键时也触发处理
