@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         班固米猜简介
 // @namespace    http://tampermonkey.net/
-// @version      2026-06-07
+// @version      3.2
 // @description  通过键入单个字，尝试猜测某部作品中简介可能存在的字，并猜出作品
 // @author       jan30chen
-// @match      https://chii.in/magi*
-// @match      https://bgm.tv/magi*
-// @match      https://bangumi.tv/magi*
+// @match        https://chii.in/magi*
+// @match        https://bgm.tv/magi*
+// @match        https://bangumi.tv/magi*
 // @grant        none
 // ==/UserScript==
 
@@ -29,6 +29,23 @@
     let currentIndex = urlParams.get('index');
     let titleName = ''; // 题库名称
     let total = 0;  // 题量
+
+    const nav = document.querySelector('ul.crtChlNav');
+    if (nav) {
+      const navLis = nav.querySelectorAll('li');
+      navLis.forEach((li, index) => {
+        const link = li.querySelector('a');
+        if (link) {
+          if (index === navLis.length - 1) {
+            // 最后一个li中的a添加focus类
+            link.classList.add('focus');
+          } else {
+            // 其他li中的a移除focus类
+            link.classList.remove('focus');
+          }
+        }
+      });
+    }
 
     // 清除之前的内容
     const columnAppA = document.getElementById('columnAppA');
@@ -253,8 +270,7 @@
       }
 
         // 处理中文名称
-        const trueName = name_cn || name;
-        const cleanedName = trueName.replace(/[\p{P}\p{S}\p{Z}]/gu, '');
+        const cleanedName = (name_cn || name).replace(/[\p{P}\p{S}\s]/gu, '');
 
         const summaryDiv = document.createElement('div');
         summaryDiv.id = 'summaryDiv';
@@ -267,7 +283,7 @@
         summaryDiv.style.gap = '2px';
 
         // 保存原始值和加密后的内容
-        originalSummary = summary.split('[简介原文]')[0]; // 兼容双语简介组件
+        originalSummary = summary.split('[简介原文]')[0].replace(/[\s]/gu, ''); // 移除空格s与换行符，兼容双语简介组件
         originalCleanedName = cleanedName;
         currentEncryptedSummary = encryptedText(originalSummary);
         currentEncryptedName = encryptedText(originalCleanedName);
@@ -350,12 +366,13 @@
         puzzlesDiv.appendChild(titleDiv);
         puzzlesDiv.appendChild(summaryDiv);
 
+        /* 提示部分 */
         const hintsContainer = document.createElement('div');
         hintsContainer.style.marginTop = '10px';
         hintsContainer.style.display = 'flex';
         hintsContainer.style.gap = '8px';
         hintsContainer.style.flexWrap = 'wrap';
-        // 在提示按钮前增加说明文本
+
         const hintsLabel = document.createElement('span');
         hintsLabel.textContent = '点击展示提示 >>';
         hintsLabel.style.fontSize = '12px';
@@ -398,6 +415,7 @@
           });
           hintsContainer.appendChild(hintBtn);
         });
+        /* 提示部分 end */
 
         puzzlesDiv.appendChild(hintsContainer);
         columnAppA.appendChild(puzzlesDiv);
@@ -592,11 +610,10 @@
 
     // 构建入口
     const newLi = document.createElement('li');
-    newLi.innerHTML = '<span style="color: #369cf8;cursor: pointer;">猜简介</span>';
+    newLi.innerHTML = '<a href="javascript:void(0);">猜简介</a>';
     newLi.addEventListener('click', beginGame);
     document.querySelector('ul.crtChlNav').appendChild(newLi);
-    // todo
-    if (window.location.search.includes('subject=') || window.location.search.includes('index=') || window.location.search.includes('user=')) {
+    if (/subject=|index=|user=/.test(window.location.search)) {
       beginGame();
     }
   }) ();
